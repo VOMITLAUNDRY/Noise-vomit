@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Noise Vomit</title>
+  <meta name="description" content="Noise Show — audience-play soundboard. Scan the QR to open on your phone and tap to play." />
+  <style>
+    :root{
+      --bg:#000;
+      --neon:#0f0;
+      --muted:#6b6b6b;
+      --panel: rgba(255,255,255,0.03);
+    }
+    html,body{height:100%}
+    body{
+      margin:0;
+      padding:1rem;
+      background:linear-gradient(180deg,#050505 0%, #000 100%);
+      color:var(--neon);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      text-align:center;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      display:flex;
+      flex-direction:column;
+      gap:.75rem;
+      min-height:100vh;
+      box-sizing:border-box;
+    }
+    header{display:flex;flex-direction:column;align-items:center;gap:.25rem}
+    h1{margin:0;font-size:1.4rem;letter-spacing:2px}
+    p.lead{margin:0;color:var(--muted);font-size:.95rem}
+    .top-row{display:flex;gap:.6rem;align-items:center;justify-content:center;flex-wrap:wrap}
+    .btn{background:transparent;color:var(--neon);border:2px solid var(--neon);padding:.5rem .9rem;border-radius:8px;cursor:pointer}
+    .btn.primary{background:var(--neon);color:#000}
+    .status{color:var(--neon);background:var(--panel);padding:.4rem .6rem;border-radius:8px;font-size:.9rem}
+    .share {
+      margin-top:.6rem;
+      display:flex;
+      gap:1rem;
+      align-items:center;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    .qr {
+      width:128px;
+      height:128px;
+      border-radius:8px;
+      border:4px solid rgba(255,255,255,0.03);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#fff;
+    }
+    .hint{color:var(--muted);font-size:.85rem}
+    .sound-grid{
+      margin-top:.6rem;
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+      gap:.6rem;
+      width:100%;
+      max-width:980px;
+      margin-left:auto;
+      margin-right:auto;
+    }
+    .card{
+      background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.03);
+      padding:.6rem;
+      border-radius:8px;
+      display:flex;
+      gap:.5rem;
+      align-items:center;
+      justify-content:space-between;
+      color:var(--neon);
+      user-select:none;
+    }
+    .meta{flex:1;text-align:left;font-size:.9rem}
+    .meta small{display:block;color:var(--muted);font-size:.75rem;margin-top:.25rem}
+    .play-single{background:transparent;border:1px solid var(--neon);color:var(--neon);padding:.3rem .6rem;border-radius:6px;cursor:pointer}
+    .controls-row{display:flex;gap:.6rem;align-items:center;justify-content:center;flex-wrap:wrap}
+    input[type="range"]{width:140px}
+    footer{margin-top:auto;color:var(--muted);font-size:.8rem;padding-top:0.5rem}
+    @media (max-width:420px){ input[type="range"]{width:100%} .qr{width:96px;height:96px} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📱 Noise Show — Soundboard</h1>
+    <p class="lead">Scan the QR (or open this page on your phone) and tap a sound to play it on your device.</p>
+  </header>
+
+  <div class="top-row" role="region" aria-label="controls">
+    <div class="controls-row">
+      <button id="playRandom" class="btn primary">Play Random</button>
+      <button id="stopBtn" class="btn">Stop</button>
+      <div class="status" id="status">Idle</div>
+      <label class="hint" style="display:flex;align-items:center;gap:.4rem;margin-left:.6rem;">
+        <small style="color:var(--muted)">Vol</small>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" />
+      </label>
+    </div>
+  </div>
+
+  <div class="share" aria-hidden="false">
+    <div>
+      <div style="color:var(--muted);font-size:.85rem">Share this page</div>
+      <div class="qr" id="qrContainer" title="QR to open this page on phones">
+        <!-- QR will be inserted here -->
+        <img id="qrImg" alt="QR code" style="width:100%;height:100%;object-fit:cover;border-radius:6px"/>
+      </div>
+    </div>
+    <div style="text-align:left;max-width:380px">
+      <div class="hint">Project this QR so the audience can scan it from their seats. After the site is live, the QR links to the page automatically.</div>
+      <div style="margin-top:.5rem;">
+        <button id="copyLink" class="btn">Copy link</button>
+        <button id="openLink" class="btn">Open (this device)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sound-grid" id="soundGrid" aria-live="polite"></div>
+
+  <div style="text-align:center;margin-top:.6rem;color:var(--muted);font-size:.85rem;">
+    <small>Space = Play random · Esc = Stop</small>
+  </div>
+
+  <footer>Noise Show Interactive • © Your Name 2025</footer>
+
+  <audio id="player" preload="auto"></audio>
+
+  <script>
+    // ----------------------
+    // CONFIGURE YOUR SOUNDS
+    // Put your audio files in /sounds/ and list them here (relative paths).
+    // Example: "sounds/01-hit.mp3"
+    // ----------------------
+    const sounds = [
+      "sounds/01-beep.mp3",
+      "sounds/02-noise.mp3",
+      "sounds/03-thump.mp3",
+      "sounds/04-spark.wav",
+      "sounds/05-pop.mp3"
+      // Add up to ~30 files; keep them short and normalized.
+    ];
+
+    // Simple helper to build absolute URL for sound files when served from GitHub Pages
+    function makeUrl(path) {
+      // If path is already absolute URL, return it
+      if (/^https?:\/\//.test(path)) return path;
+      // else build relative (this works on GitHub Pages; keep files next to index.html or in /sounds/)
+      return new URL(path, location.href).href;
+    }
+
+    // DOM refs
+    const player = document.getElementById("player");
+    const playRandomBtn = document.getElementById("playRandom");
+    const stopBtn = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+    const volumeEl = document.getElementById("volume");
+    const soundGrid = document.getElementById("soundGrid");
+    const qrImg = document.getElementById("qrImg");
+    const copyLink = document.getElementById("copyLink");
+    const openLink = document.getElementById("openLink");
+
+    // Volume persistence (localStorage)
+    const savedVol = parseFloat(localStorage.getItem("noise_show_volume"));
+    if (!Number.isNaN(savedVol)) volumeEl.value = savedVol;
+    player.volume = Number(volumeEl.value || 0.9);
+    volumeEl.addEventListener("input", () => {
+      player.volume = Number(volumeEl.value);
+      localStorage.setItem("noise_show_volume", player.volume);
+    });
+
+    // Deck shuffle to avoid repeats
+    let deck = [];
+    function refillDeck(){
+      deck = sounds.slice();
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
+    refillDeck();
+
+    function updateStatus(text){
+      statusEl.textContent = text;
+      setTimeout(() => {
+        if (!player.paused && !player.ended) statusEl.textContent = "Playing";
+        else statusEl.textContent = "Idle";
+      }, 2500);
+    }
+
+    function playSrc(src, label){
+      player.src = makeUrl(src);
+      player.currentTime = 0;
+      const p = player.play();
+      updateStatus(label || src);
+      if (p !== undefined) p.catch(err => {
+        console.warn("Play failed:", err);
+        updateStatus("Tap any control to enable audio");
+      });
+    }
+
+    function stopAll(){
+      player.pause();
+      player.currentTime = 0;
+      updateStatus("Stopped");
+    }
+
+    function playRandom(){
+      if (deck.length === 0) refillDeck();
+      const next = deck.pop();
+      playSrc(next, "Random: " + next);
+    }
+
+    // Build UI grid
+    function renderGrid(){
+      soundGrid.innerHTML = "";
+      if (!sounds.length) {
+        const msg = document.createElement("div");
+        msg.className = "card";
+        msg.textContent = "No sounds configured. Edit the 'sounds' array in the page to add files (place files in /sounds/).";
+        soundGrid.appendChild(msg);
+        return;
+      }
+      sounds.forEach((s, i) => {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = `<strong>Sound ${i+1}</strong><small>${s}</small>`;
+
+        const btn = document.createElement("button");
+        btn.className = "play-single";
+        btn.textContent = "Play";
+        btn.addEventListener("click", () => {
+          playSrc(s, `Play: ${s}`);
+        });
+
+        card.appendChild(meta);
+        card.appendChild(btn);
+        soundGrid.appendChild(card);
+      });
+    }
+    renderGrid();
+
+    // Event wiring
+    playRandomBtn.addEventListener("click", playRandom);
+    stopBtn.addEventListener("click", stopAll);
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") { e.preventDefault(); playRandom(); }
+      if (e.code === "Escape") stopAll();
+    });
+
+    player.addEventListener("ended", () => updateStatus("Finished"));
+    player.addEventListener("play", () => { statusEl.textContent = "Playing"; });
+    player.addEventListener("pause", () => {
+      if (player.currentTime === 0) statusEl.textContent = "Idle";
+    });
+
+    // QR generation: create a QR linking to the current page URL (good when deployed on GitHub Pages)
+    function generateQRforCurrentURL(){
+      try {
+        const url = location.href;
+        // Use a public QR generator API (qrserver.com) — this makes an image you can project for people to scan
+        const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(url);
+        qrImg.src = qrUrl;
+        qrImg.alt = "QR to open " + url;
+      } catch (err) {
+        console.warn("QR generation failed:", err);
+      }
+    }
+    generateQRforCurrentURL();
+
+    // Copy / open link helpers
+    copyLink.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        copyLink.textContent = "Copied!";
+        setTimeout(()=> copyLink.textContent = "Copy link", 1500);
+      } catch (err) {
+        copyLink.textContent = "Copy failed";
+        setTimeout(()=> copyLink.textContent = "Copy link", 1500);
+      }
+    });
+    openLink.addEventListener("click", () => {
+      window.open(location.href, "_self");
+    });
+
+    // Preload a few sounds (non-blocking)
+    function preloadSamples(count=4){
+      const list = sounds.slice(0, count).map(makeUrl);
+      list.forEach(src => {
+        const a = new Audio();
+        a.preload = "auto";
+        a.src = src;
+        // let browser handle caching; we don't need references
+      });
+    }
+    preloadSamples(4);
+
+    // Helpful instructions shown when first load (gesture prompt if autoplay blocked)
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        // If page is opened in a browser that blocks autoplay, give a prompt
+        if (player.paused && player.currentTime === 0) {
+          updateStatus("Tap Play to enable audio");
+        }
+      }, 600);
+    });
+
+    // If you're serving from GitHub Pages and you update the page, this site will always generate a QR to the page URL.
+  </script>
+</body>
+</html>
